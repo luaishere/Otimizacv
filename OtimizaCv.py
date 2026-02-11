@@ -14,156 +14,205 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- CSS (UX OTIMIZADO) ----------------
+# ---------------- CSS (VISUAL) ----------------
 st.markdown("""
 <style>
     .stApp { background-color: #0E1117; color: #E0E0E0; }
-    .main-header { color: #A78BFA; font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; }
-    .metric-card {
-        background: #1F2937;
-        padding: 20px;
-        border-radius: 12px;
-        border-top: 4px solid #8B5CF6;
-        text-align: center;
+    h1 { color: #A78BFA !important; font-family: 'Helvetica Neue', sans-serif; font-weight: 800; }
+    h2, h3 { color: #F3F4F6 !important; }
+    
+    .hero-box {
+        background: linear-gradient(90deg, #1F2937 0%, #111827 100%);
+        padding: 30px;
+        border-radius: 15px;
+        border-left: 6px solid #8B5CF6;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
     }
+    .hero-box h3 { color: #C4B5FD !important; margin-top: 0; }
+    
+    .stTextInput input, .stTextArea textarea { 
+        background-color: #1F2937 !important; color: #FFFFFF !important; border: 1px solid #374151; border-radius: 8px;
+    }
+    
+    [data-testid="stFileUploader"] {
+        background-color: #1F2937; border: 2px dashed #6D28D9; padding: 20px; border-radius: 12px; text-align: center;
+    }
+
     .stButton > button { 
         background: linear-gradient(90deg, #7C3AED 0%, #6D28D9 100%);
-        border: none;
-        height: 3.5rem;
-        font-weight: bold;
+        color: white !important; width: 100%; font-size: 20px; padding: 1rem;
+        border-radius: 12px; border: none; font-weight: 700; 
+        box-shadow: 0 4px 14px 0 rgba(124, 58, 237, 0.39);
+        transition: all 0.2s ease-in-out;
     }
+    .stButton > button:hover { transform: scale(1.02); }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- CONFIG DE APIS ----------------
+# ---------------- HEADER ----------------
+st.title("Otimizador de Currículo Express")
+st.caption("Em um clique: Diagnóstico completo + Nova versão do seu CV.")
+
+st.markdown("""
+<div class="hero-box">
+    <h3>Como funciona a Mágica 1-Clique:</h3>
+    <p>
+        Nossa IA lê seu perfil e a vaga. Em alguns segundos, ela vai:
+        <br>1. 🕵️‍♀️ <b>Investigar</b> se você passa no filtro do robô recrutador.
+        <br>2. ✨ <b>Reescrever</b> seu currículo automaticamente com as palavras-chave certas.
+        <br>3. 🛡️ <b>Fidelidade:</b> Ela não inventará nada que não esteja no seu currículo original.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# ---------------- CONFIG ----------------
 try:
-    # Configuração do Gemini
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 except Exception as e:
-    st.error("Erro de configuração das Secrets. Verifique o painel do Streamlit.")
+    st.error("Erro de conexão. Verifique a chave de API nas Secrets.")
     st.stop()
 
-# ---------------- FUNÇÕES DE APOIO ----------------
-
+# ---------------- FUNÇÕES ----------------
 def extrair_texto_pdf(arquivo):
     reader = PyPDF2.PdfReader(arquivo)
     texto = ""
     for page in reader.pages:
-        content = page.extract_text()
-        if content: texto += content
+        txt = page.extract_text()
+        if txt: texto += txt
     return texto
 
 def extrair_nota_robusta(texto):
+    """Extrai a nota ignorando formatações de negrito ou espaços extras."""
     match = re.search(r'(?:Nota|Minha Nota).*?(\d+)', texto, re.IGNORECASE | re.DOTALL)
     return int(match.group(1)) if match else 0
 
-def salvar_no_sheets(email, nota, resumo_candidato, resumo_vaga, resumo_mudanca, analise, cv_novo):
+def salvar_no_sheets(email, nota, resumo_candidato, resumo_vaga, resumo_otimizacao, analise, cv_novo):
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
         gc = gspread.authorize(creds)
-        
-        # Abre a planilha pelo nome (Certifique-se de que compartilhou com o e-mail do bot!)
         sh = gc.open("Banco de Curriculos")
         sheet = sh.sheet1
 
-        dados = [str(datetime.now()), email, f"{nota}%", resumo_candidato, resumo_vaga, resumo_mudanca, analise, cv_novo]
+        dados = [
+            str(datetime.now()), 
+            email, 
+            f"{nota}%", 
+            resumo_candidato,
+            resumo_vaga,
+            resumo_otimizacao,
+            analise,
+            cv_novo
+        ]
         sheet.append_row(dados)
         return True
     except Exception as e:
         st.error(f"Erro ao salvar na planilha: {e}")
         return False
 
-def chamar_ia_agente_fiel(dados_cv, dados_vaga):
-    # Alterado para 'gemini-pro' para maior compatibilidade
-    model = genai.GenerativeModel("gemini-pro")
+def chamar_ia_completa(dados_cv, dados_vaga):
+    # CORREÇÃO DO NOME DO MODELO: Usando a versão estável mais recente
+    model = genai.GenerativeModel("gemini-1.5-flash")
     
     prompt_mestre = f"""
     Atue como uma Especialista em Recolocação e ATS.
     
-    REGRA DE OURO: PROIBIDO inventar experiências ou ferramentas que não estejam no currículo original. 
-
-    TAREFA 1: ANÁLISE
-    1. **Onde você brilha ✨**
-    2. **Cuidado com isso ⚠️**
+    REGRA DE FIDELIDADE: É proibido inventar ferramentas, cursos ou experiências que não estejam no CV original.
+    
+    TAREFA 1: ANÁLISE (Fale com o candidato)
+    1. **Onde você brilha ✨:** (Pontos fortes)
+    2. **Cuidado com isso ⚠️:** (Gaps e riscos reais. Mencione se a vaga pede algo que o candidato não tem)
     3. **Minha Nota:** X%
-    4. **Veredito**
+    4. **Veredito:** (Resumo sincero)
 
-    TAREFA 2: CURRÍCULO OTIMIZADO
-    Reescreva priorizando termos da vaga que o candidato REALMENTE possui.
+    TAREFA 2: OTIMIZAÇÃO (Gere o documento)
+    Reescreva o currículo priorizando o que o candidato JÁ TEM e que a vaga pede.
     
     ---DIVISOR_CV---
-    (Novo CV aqui)
+    (Texto do Novo Currículo em Markdown)
     
     ---DIVISOR_DADOS---
     CANDIDATO: (Resumo perfil)
     VAGA: (Resumo vaga)
     MUDANCA: (O que foi priorizado)
     
-    DADOS:
-    CV ORIGINAL: {dados_cv}
-    VAGA ALVO: {dados_vaga}
+    DADOS DE ENTRADA:
+    CV: {dados_cv}
+    VAGA: {dados_vaga}
     """
     
     resposta = model.generate_content(prompt_mestre).text
     return resposta
 
-# ---------------- INTERFACE PRINCIPAL ----------------
-
-st.markdown('<h1 class="main-header">CV Optimizer Pro <span style="font-size: 1rem; color: #6D28D9;">V2.1</span></h1>', unsafe_allow_html=True)
-
-col1, col2 = st.columns([1, 1.2])
-
+# ---------------- INTERFACE ----------------
+col1, col2 = st.columns(2)
 with col1:
-    st.subheader("📄 Seus Dados")
-    email = st.text_input("E-mail para registro", placeholder="seu@email.com")
-    pdf = st.file_uploader("Upload do CV Original (PDF)", type="pdf")
-
+    st.subheader("1. Quem é você?")
+    email = st.text_input("Seu e-mail", placeholder="ex: joao@email.com")
+    pdf = st.file_uploader("Seu Currículo (PDF)", type="pdf")
 with col2:
-    st.subheader("🎯 Vaga Alvo")
-    vaga = st.text_area("Descrição da Oportunidade", height=230, placeholder="Cole aqui os requisitos da vaga...")
+    st.subheader("2. A Vaga Alvo")
+    vaga = st.text_area("Descrição da Vaga", height=260, placeholder="Cole a descrição completa aqui...")
 
-st.divider()
-aceite = st.checkbox("Estou ciente que os dados serão processados para fins de otimização.")
+st.markdown("---")
+aceite = st.checkbox("Aceito compartilhar dados para análise.")
 
-if st.button("🚀 Gerar Otimização Estratégica"):
-    if not (email and pdf and vaga and aceite):
-        st.warning("⚠️ Preencha todos os campos corretamente.")
+# ---------------- BOTÃO MÁGICO ----------------
+if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
+    if not aceite or not email or not pdf or not vaga:
+        st.warning("⚠️ Preencha tudo acima para a mágica acontecer!")
     else:
-        with st.spinner("🤖 Agente analisando e salvando dados..."):
+        with st.spinner("🤖 A IA está analisando com fidelidade total..."):
             try:
                 texto_cv = extrair_texto_pdf(pdf)
-                resposta_completa = chamar_ia_agente_fiel(texto_cv, vaga)
+                resposta_completa = chamar_ia_completa(texto_cv, vaga)
                 
-                # Parsing
-                partes_cv = resposta_completa.split("---DIVISOR_CV---")
-                analise = partes_cv[0].strip()
-                restante = partes_cv[1] if len(partes_cv) > 1 else ""
-                
-                partes_dados = restante.split("---DIVISOR_DADOS---")
-                novo_cv = partes_dados[0].strip()
-                
-                # Extração de metadados para o Sheets
-                bloco_dados = partes_dados[1] if len(partes_dados) > 1 else ""
-                res_c, res_v, res_m = "N/A", "N/A", "N/A"
-                for linha in bloco_dados.split('\n'):
-                    if "CANDIDATO:" in linha: res_c = linha.replace("CANDIDATO:", "").strip()
-                    if "VAGA:" in linha: res_v = linha.replace("VAGA:", "").strip()
-                    if "MUDANCA:" in linha: res_m = linha.replace("MUDANCA:", "").strip()
+                # LÓGICA DE SEPARAÇÃO (Parsing)
+                analise = ""
+                novo_cv = ""
+                resumo_candidato = "N/A"
+                resumo_vaga = "N/A"
+                resumo_mudanca = "N/A"
 
+                if "---DIVISOR_CV---" in resposta_completa:
+                    partes = resposta_completa.split("---DIVISOR_CV---")
+                    analise = partes[0].strip()
+                    resto = partes[1]
+                    
+                    if "---DIVISOR_DADOS---" in resto:
+                        partes_finais = resto.split("---DIVISOR_DADOS---")
+                        novo_cv = partes_finais[0].strip()
+                        bloco_dados = partes_finais[1].strip()
+                        
+                        for linha in bloco_dados.split('\n'):
+                            if "CANDIDATO:" in linha: resumo_candidato = linha.replace("CANDIDATO:", "").strip()
+                            if "VAGA:" in linha: resumo_vaga = linha.replace("VAGA:", "").strip()
+                            if "MUDANCA:" in linha: resumo_mudanca = linha.replace("MUDANCA:", "").strip()
+                    else:
+                        novo_cv = resto.strip()
+
+                # Extrai nota corrigida
                 nota = extrair_nota_robusta(analise)
-
-                # Salvar no Google Sheets
-                salvar_no_sheets(email, nota, res_c, res_v, res_m, analise, novo_cv)
-
-                # Exibição
-                aba1, aba2 = st.tabs(["📊 Diagnóstico", "✨ Novo Currículo"])
-                with aba1:
-                    st.markdown(f"### Score de Match: {nota}%")
-                    st.markdown(analise)
-                with aba2:
-                    st.text_area("Copie seu novo currículo:", value=novo_cv, height=400)
-                    st.download_button("Baixar TXT", novo_cv, file_name="cv_otimizado.txt")
+                
+                # Salva na planilha
+                salvar_no_sheets(email, nota, resumo_candidato, resumo_vaga, resumo_mudanca, analise, novo_cv)
+                
+                # ---------------- EXIBIÇÃO ----------------
+                st.markdown("## 📊 Seu Diagnóstico")
+                col_n, col_t = st.columns([1, 4])
+                with col_n:
+                    st.metric("Compatibilidade", f"{nota}%")
+                with col_t:
+                    if nota > 70: st.success("Excelente aderência com suas competências atuais!")
+                    else: st.warning("Ajustamos o foco para destacar seus pontos fortes reais.")
+                
+                st.write(analise)
+                
+                st.markdown("---")
+                st.markdown("## ✨ Sua Nova Versão Otimizada (Fiel ao seu Histórico)")
+                st.info("Copie o texto abaixo e cole no seu editor de currículo.")
+                st.code(novo_cv, language="markdown")
                 
                 st.balloons()
 

@@ -101,7 +101,7 @@ def chamar_ia(dados_cv, dados_vaga):
     return model.generate_content(prompt).text
 
 # ---------------- INTERFACE ----------------
-st.title("🎯 Otimizador de Currículo Express")
+st.title("🎯 Otimizador de Currículo")
 st.markdown("""
 <div class="hero-box">
     <h3>Como funciona:</h3>
@@ -155,9 +155,7 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
 
                     # --- ENTREGA DE RESULTADOS ---
                     st.success(f"### 🎯 Resultado: {score}% de Compatibilidade")
-                    
-                    aba_diagnostico, aba_curriculo = st.tabs(["📊 Diagnóstico")
-                    
+                                        
                     with aba_diagnostico:
                         c1, c2 = st.columns(2)
                         with c1:
@@ -175,3 +173,4 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
 
                 except Exception as e:
                     st.error(f"Erro no processamento da IA: {e}")
+

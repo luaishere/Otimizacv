@@ -1,0 +1,6 @@
+streamlit
+google-generativeai>=0.8.3
+pypdf2
+gspread
+google-auth
+pandas

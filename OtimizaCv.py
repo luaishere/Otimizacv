@@ -13,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- CSS (VISUAL LIMPO E PRÁTICO) ----------------
+# ---------------- CSS (VISUAL LIMPO) ----------------
 st.markdown("""
 <style>
     .stApp { background-color: #0E1117; color: #E0E0E0; }
@@ -36,10 +36,10 @@ st.markdown("""
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 except:
-    st.error("Erro de conexão. Verifique as Secrets no Streamlit.")
+    st.error("Erro de conexão. Verifique as Secrets.")
     st.stop()
 
-# ---------------- FUNÇÕES DE SUPORTE ----------------
+# ---------------- FUNÇÕES DE APOIO ----------------
 def extrair_texto_pdf(arquivo):
     try:
         reader = PyPDF2.PdfReader(arquivo)
@@ -52,7 +52,6 @@ def extrair_texto_pdf(arquivo):
         return "ERRO_LEITURA"
 
 def limpar_markdown_resumo(texto):
-    """Remove sujeira de markdown para exibição limpa em cards."""
     if not texto: return "N/A"
     return texto.replace("**", "").replace("#", "").strip()
 
@@ -87,11 +86,11 @@ def chamar_ia(dados_cv, dados_vaga):
     Reescreva o currículo focado na vaga usando APENAS dados reais do CV original.
     
     ---DIVISOR_CV---
-    (Texto do Novo CV em Markdown)
+    (Texto do Novo CV aqui)
     
     ---DIVISOR_DADOS---
-    CANDIDATO: (1 frase do perfil atual)
-    VAGA: (1 frase da vaga)
+    CANDIDATO: (Resumo perfil)
+    VAGA: (Resumo vaga)
     MUDANCA: (O que foi priorizado)
     
     ENTRADA:
@@ -131,65 +130,76 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
             texto_extraido = extrair_texto_pdf(user_pdf)
             
             if texto_extraido in ["ERRO_VAZIO", "ERRO_LEITURA"]:
-                st.error("Não conseguimos ler seu PDF. Tente um arquivo com texto selecionável.")
+                st.error("Não conseguimos ler seu PDF. Tente outro arquivo.")
             else:
                 try:
                     res_ia = chamar_ia(texto_extraido, job_desc)
                     
-                    # Parsing Robusto
-                    p_cv = res_ia.split("---DIVISOR_CV---")
-                    txt_analise = p_cv[0].strip()
-                    resto = p_cv[1] if len(p_cv) > 1 else ""
+                    # --- PARSING BLINDADO (REVISADO) ---
+                    analise, novo_cv, bloco_meta = "", "", ""
                     
-                    p_dados = resto.split("---DIVISOR_DADOS---")
-                    txt_novo_cv = p_dados[0].strip()
-                    bloco_meta = p_dados[1] if len(p_dados) > 1 else ""
+                    # Tenta quebrar pelo divisor do CV
+                    if "---DIVISOR_CV---" in res_ia:
+                        partes = res_ia.split("---DIVISOR_CV---")
+                        analise = partes[0].strip()
+                        resto = partes[1]
+                        
+                        # Tenta quebrar pelo divisor de Dados
+                        if "---DIVISOR_DADOS---" in resto:
+                            partes_finais = resto.split("---DIVISOR_DADOS---")
+                            novo_cv = partes_finais[0].strip()
+                            bloco_meta = partes_finais[1].strip()
+                        else:
+                            novo_cv = resto.strip()
+                    else:
+                        # Se falhar totalmente o divisor, tenta achar por palavras-chave
+                        analise = "Verifique o currículo abaixo."
+                        novo_cv = res_ia
 
-                    score = extrair_nota_robusta(txt_analise)
+                    score = extrair_nota_robusta(analise)
                     m_cand, m_vaga, m_mud = "N/A", "N/A", "N/A"
-                    for linha in bloco_meta.split('\n'):
-                        l = linha.strip()
-                        if "CANDIDATO:" in l: m_cand = l.split(":", 1)[1].strip()
-                        if "VAGA:" in l: m_vaga = l.split(":", 1)[1].strip()
-                        if "MUDANCA:" in l or "MUDANÇA:" in l: m_mud = l.split(":", 1)[1].strip()
+                    
+                    if bloco_meta:
+                        for linha in bloco_meta.split('\n'):
+                            l = linha.strip()
+                            if "CANDIDATO:" in l: m_cand = l.split(":", 1)[1].strip()
+                            if "VAGA:" in l: m_vaga = l.split(":", 1)[1].strip()
+                            if "MUDANCA:" in l or "MUDANÇA:" in l: m_mud = l.split(":", 1)[1].strip()
 
                     # --- ENTREGA DE RESULTADOS ---
                     st.success(f"### 🎯 Resultado: {score}% de Compatibilidade")
                     
-                    aba_diagnostico, aba_curriculo = st.tabs(["📊 Diagnóstico", "📄 Novo Currículo"])
+                    aba_diag, aba_cv = st.tabs(["📊 Diagnóstico", "📄 Novo Currículo"])
                     
-                    with aba_diagnostico:
+                    with aba_diag:
                         c1, c2 = st.columns(2)
                         with c1:
                             st.info(f"**Seu Perfil:**\n\n{limpar_markdown_resumo(m_cand)}")
                         with c2:
                             st.warning(f"**O que mudou:**\n\n{limpar_markdown_resumo(m_mud)}")
-                        
                         st.divider()
                         st.markdown("#### Análise Completa")
-                        st.write(txt_analise)
+                        st.write(analise)
 
-                    with aba_curriculo:
-                        st.info("✨ Currículo otimizado com sucesso! Veja a prévia abaixo e utilize o campo de texto para cópia.")
-                        
-                        # Preview Formatado
-                        with st.container(border=True):
-                            st.markdown(txt_novo_cv)
-                        
-                        st.divider()
-                        st.subheader("📥 Levar para o seu editor")
-                        st.caption("Clique no ícone de cópia no campo abaixo para levar o texto limpo para o Word/Docs:")
-                        st.text_area("Texto Otimizado (Copie aqui):", value=txt_novo_cv, height=400)
-                        
-                        st.download_button(
-                            "Baixar como Arquivo .txt", 
-                            txt_novo_cv, 
-                            file_name=f"CV_Otimizado_{datetime.now().strftime('%d%m%Y')}.txt"
-                        )
+                    with aba_cv:
+                        if not novo_cv or len(novo_cv) < 50:
+                            st.error("Houve um problema ao separar o currículo. Veja a aba Diagnóstico.")
+                        else:
+                            st.success("✨ Currículo otimizado com sucesso!")
+                            
+                            # Preview formatado para leitura
+                            with st.container(border=True):
+                                st.markdown(novo_cv)
+                            
+                            st.divider()
+                            st.subheader("📥 Levar para o seu editor")
+                            st.caption("Copie o texto limpo abaixo:")
+                            st.text_area("Campo de Cópia (Ctrl+C):", value=novo_cv, height=400)
+                            
+                            st.download_button("Baixar como .txt", novo_cv, file_name="curriculo_otimizado.txt")
 
-                    # Salvamento no Banco
-                    salvar_no_sheets(user_email, score, m_cand, m_vaga, m_mud, txt_analise, txt_novo_cv)
+                    salvar_no_sheets(user_email, score, m_cand, m_vaga, m_mud, analise, novo_cv)
                     st.balloons()
 
                 except Exception as e:
-                    st.error(f"Erro no processamento da IA: {e}")
+                    st.error(f"Erro no processamento: {e}")

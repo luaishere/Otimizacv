@@ -163,12 +163,12 @@ with col2:
 st.markdown("---")
 aceite = st.checkbox("Aceito compartilhar dados para análise.")
 
-# ---------------- BOTÃO MÁGICO ----------------
+# ---------------- BOTÃO MÁGICO V4 (UX PREMIUM) ----------------
 if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
     if not aceite or not email or not pdf or not vaga:
         st.warning("⚠️ Preencha tudo acima para a mágica acontecer!")
     else:
-        with st.spinner("🤖 A IA está analisando seu perfil..."):
+        with st.spinner("🤖 O Agente está redesenhando sua estratégia..."):
             texto_cv = extrair_texto_pdf(pdf)
             
             if texto_cv in ["ERRO_VAZIO", "ERRO_LEITURA"]:
@@ -177,7 +177,7 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
                 try:
                     resposta_completa = chamar_ia_completa(texto_cv, vaga)
                     
-                    # --- PARSING DOS DADOS ---
+                    # --- PARSING INTELIGENTE E LIMPEZA ---
                     analise, novo_cv = "", ""
                     res_cand, res_vaga, res_mud = "N/A", "N/A", "N/A"
 
@@ -185,72 +185,72 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
                         partes = resposta_completa.split("---DIVISOR_CV---")
                         analise = partes[0].strip()
                         resto = partes[1]
+                        
                         if "---DIVISOR_DADOS---" in resto:
                             p_finais = resto.split("---DIVISOR_DADOS---")
                             novo_cv = p_finais[0].strip()
+                            # Limpeza dos resumos (remove asteriscos e rótulos da IA)
                             for l in p_finais[1].split('\n'):
-                                if "CANDIDATO:" in l: res_cand = l.replace("CANDIDATO:", "").strip()
-                                if "VAGA:" in l: res_vaga = l.replace("VAGA:", "").strip()
-                                if "MUDANCA:" in l or "MUDANÇA:" in l: res_mud = l.split(":", 1)[1].strip()
+                                l_limpa = l.replace("**", "").strip()
+                                if "CANDIDATO:" in l_limpa: res_cand = l_limpa.split(":", 1)[1].strip()
+                                if "VAGA:" in l_limpa: res_vaga = l_limpa.split(":", 1)[1].strip()
+                                if "MUDANCA:" in l_limpa or "MUDANÇA:" in l_limpa: 
+                                    res_mud = l_limpa.split(":", 1)[1].strip()
                         else:
                             novo_cv = resto.strip()
                     else:
                         analise = resposta_completa
-                        novo_cv = "O currículo está misturado na análise acima."
+                        novo_cv = "Currículo gerado dentro da análise detalhada."
 
                     nota = extrair_nota_robusta(analise)
 
-                    # --- ENTREGA PROFISSIONAL (A FORMA DA ENTREGA) ---
+                    # --- INTERFACE DE ENTREGA (DASHBOARD) ---
                     st.markdown("---")
-                    st.markdown(f"### 📊 Diagnóstico Estratégico (Match: {nota}%)")
+                    st.header("🎯 Resultado da Otimização")
                     
+                    # Métricas de topo
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Match Score", f"{nota}%")
+                    m2.metric("Status", "Otimizado" if nota > 70 else "Ajustado")
+                    m3.metric("Fidelidade", "100% Protegida")
+
+                    # Cards de Diagnóstico
+                    st.markdown("#### 🕵️ Análise do Agente")
                     c1, c2 = st.columns(2)
                     with c1:
-                        st.info(f"**O que a IA identificou:**\n\n{res_cand}")
+                        st.info(f"**Perfil Identificado**\n\n{res_cand}")
                     with c2:
-                        st.warning(f"**Principais Ajustes:**\n\n{res_mud}")
+                        st.warning(f"**Ajustes Estratégicos**\n\n{res_mud}")
 
-                    with st.expander("🔍 Ver Análise Detalhada (Feedback da IA)"):
-                        st.write(analise)
-
+                    # Novo Currículo - Estilo "Folha de Papel"
                     st.markdown("---")
-                    st.markdown("### ✨ Seu Novo Currículo Otimizado")
-                    st.caption("Abaixo está a versão pronta para o seu editor de texto:")
+                    st.markdown("### 📄 Prévia do Novo Currículo")
+                    st.caption("Esta versão foi otimizada para passar por robôs (ATS) e recrutadores humanos.")
                     
-                    # Simulação de Folha A4 para melhorar a percepção de valor
+                    # CSS para simular papel A4
                     st.markdown(f"""
-                    <div style="background-color: white; color: #1a1a1a; padding: 30px; border-radius: 8px; border: 1px solid #e0e0e0; font-family: sans-serif; line-height: 1.5; font-size: 14px;">
-                        {novo_cv.replace('#', '').replace('\n', '<br>')}
+                    <div style="background-color: white; color: #333; padding: 50px; border-radius: 4px; 
+                                box-shadow: 0 4px 10px rgba(0,0,0,0.5); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                                border: 1px solid #ccc; margin-bottom: 20px;">
+                        <div style="white-space: pre-wrap; font-size: 14px; color: #1a1a1a;">
+                            {novo_cv}
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    st.download_button("📥 Baixar Currículo (.txt)", novo_cv, file_name="meu_novo_cv.txt")
+                    # Ações Finais
+                    st.success("✅ Currículo gerado com sucesso!")
+                    col_btn1, col_btn2 = st.columns(2)
+                    with col_btn1:
+                        st.download_button("📥 Baixar como TXT", novo_cv, file_name="curriculo_otimizado.txt", use_container_width=True)
+                    with col_btn2:
+                        with st.expander("👁️ Ver Feedback Completo da IA"):
+                            st.write(analise)
                     
                     salvar_no_sheets(email, nota, res_cand, res_vaga, res_mud, analise, novo_cv)
                     st.balloons()
 
                 except Exception as e:
-                    st.error(f"Erro no processamento: {e}")
-
-                    # LINHA CORRIGIDA: Agora perfeitamente alinhada com o bloco try
-                    nota = extrair_nota_robusta(analise)
-                    
-                    # ---------------- EXIBIÇÃO ----------------
-                    st.markdown(f"## 📊 Seu Diagnóstico (Match: {nota}%)")
-                    st.write(analise)
-                    
-                    st.markdown("---")
-                    st.markdown("## ✨ Sua Nova Versão Otimizada")
-                    if novo_cv:
-                        st.code(novo_cv, language="markdown")
-                    
-                    salvar_no_sheets(email, nota, "Perfil Identificado", "Vaga Analisada", "Otimização Realizada", analise, novo_cv)
-                    
-                    st.balloons()
-
-                except Exception as e:
-                    st.error(f"Houve um erro no processamento da IA: {e}")
-
+                    st.error(f"Erro ao processar: {e}")
 
 

@@ -172,89 +172,66 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
             texto_cv = extrair_texto_pdf(pdf)
             
             if texto_cv in ["ERRO_VAZIO", "ERRO_LEITURA"]:
-                st.error("❌ Não conseguimos ler o texto do seu PDF. Ele pode ser uma imagem ou estar protegido.")
+                st.error("❌ Não conseguimos ler o texto do seu PDF.")
             else:
                 try:
                     resposta_completa = chamar_ia_completa(texto_cv, vaga)
                     
-                    # Inicia as variáveis vazias
-                    analise = ""
-                    novo_cv = ""
-                    resumo_candidato = "N/A"
-                    resumo_vaga = "N/A"
-                    resumo_mudanca = "N/A"
+                    # --- PARSING DOS DADOS ---
+                    analise, novo_cv = "", ""
+                    res_cand, res_vaga, res_mud = "N/A", "N/A", "N/A"
 
-                    # 1. Separa a Análise do resto (CV + Dados)
                     if "---DIVISOR_CV---" in resposta_completa:
                         partes = resposta_completa.split("---DIVISOR_CV---")
                         analise = partes[0].strip()
-                        resto_texto = partes[1]
-                        
-                        # 2. Separa o Currículo dos Dados Finais (Resumos)
-                        if "---DIVISOR_DADOS---" in resto_texto:
-                            partes_finais = resto_texto.split("---DIVISOR_DADOS---")
-                            novo_cv = partes_finais[0].strip()
-                            bloco_dados = partes_finais[1].strip()
-                            
-                            # 3. Extrai Candidato, Vaga e Mudança (com suporte a cedilha)
-                            for linha in bloco_dados.split('\n'):
-                                linha_l = linha.strip()
-                                if "CANDIDATO:" in linha_l:
-                                    resumo_candidato = linha_l.replace("CANDIDATO:", "").strip()
-                                elif "VAGA:" in linha_l:
-                                    resumo_vaga = linha_l.replace("VAGA:", "").strip()
-                                elif "MUDANCA:" in linha_l or "MUDANÇA:" in linha_l:
-                                    resumo_mudanca = linha_l.replace("MUDANCA:", "").replace("MUDANÇA:", "").strip()
+                        resto = partes[1]
+                        if "---DIVISOR_DADOS---" in resto:
+                            p_finais = resto.split("---DIVISOR_DADOS---")
+                            novo_cv = p_finais[0].strip()
+                            for l in p_finais[1].split('\n'):
+                                if "CANDIDATO:" in l: res_cand = l.replace("CANDIDATO:", "").strip()
+                                if "VAGA:" in l: res_vaga = l.replace("VAGA:", "").strip()
+                                if "MUDANCA:" in l or "MUDANÇA:" in l: res_mud = l.split(":", 1)[1].strip()
                         else:
-                            novo_cv = resto_texto.strip()
+                            novo_cv = resto.strip()
                     else:
-                        # Plano B: Se a IA não usar divisores, mostra tudo na análise
                         analise = resposta_completa
-                        novo_cv = "A IA não formatou o currículo separadamente. Veja o diagnóstico."
+                        novo_cv = "O currículo está misturado na análise acima."
 
-                    # Extrai a nota usando a função robusta
                     nota = extrair_nota_robusta(analise)
+
+                    # --- ENTREGA PROFISSIONAL (A FORMA DA ENTREGA) ---
+                    st.markdown("---")
+                    st.markdown(f"### 📊 Diagnóstico Estratégico (Match: {nota}%)")
                     
-                    # ---------------- EXIBIÇÃO PROFISSIONAL (UX V3) ----------------
-st.markdown("---")
-st.subheader("📊 Análise Estratégica do Agente")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.info(f"**O que a IA identificou:**\n\n{res_cand}")
+                    with c2:
+                        st.warning(f"**Principais Ajustes:**\n\n{res_mud}")
 
-# Divide a análise em colunas visuais
-col_diag1, col_diag2 = st.columns(2)
+                    with st.expander("🔍 Ver Análise Detalhada (Feedback da IA)"):
+                        st.write(analise)
 
-with col_diag1:
-    st.success("### Onde você brilha ✨")
-    # Aqui extraímos apenas a parte dos pontos fortes da 'analise'
-    st.write(resumo_candidato) 
-
-with col_diag2:
-    st.warning("### Pontos de Atenção ⚠️")
-    st.write(resumo_mudanca)
-
-st.metric("Índice de Compatibilidade", f"{nota}%")
-
-st.markdown("---")
-st.subheader("✨ Seu Novo Currículo Otimizado")
-
-# Simulação de folha A4 em CSS
-st.markdown(f"""
-<div style="background-color: white; color: #333; padding: 40px; border-radius: 5px; border: 1px solid #ddd; font-family: 'Arial'; line-height: 1.6;">
-    {novo_cv.replace('#', '###').replace('\n', '<br>')}
-</div>
-""", unsafe_allow_html=True)
-
-st.markdown("<br>", unsafe_allow_html=True)
-
-# Botão de Copiar (Melhorado)
-st.button("📋 Copiar Texto Limpo para o Word", on_click=lambda: st.write("Texto copiado!"))
+                    st.markdown("---")
+                    st.markdown("### ✨ Seu Novo Currículo Otimizado")
+                    st.caption("Abaixo está a versão pronta para o seu editor de texto:")
                     
-                    # Salva no Sheets com os dados capturados
-                    salvar_no_sheets(email, nota, resumo_candidato, resumo_vaga, resumo_mudanca, analise, novo_cv)
+                    # Simulação de Folha A4 para melhorar a percepção de valor
+                    st.markdown(f"""
+                    <div style="background-color: white; color: #1a1a1a; padding: 30px; border-radius: 8px; border: 1px solid #e0e0e0; font-family: sans-serif; line-height: 1.5; font-size: 14px;">
+                        {novo_cv.replace('#', '').replace('\n', '<br>')}
+                    </div>
+                    """, unsafe_allow_html=True)
                     
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.download_button("📥 Baixar Currículo (.txt)", novo_cv, file_name="meu_novo_cv.txt")
+                    
+                    salvar_no_sheets(email, nota, res_cand, res_vaga, res_mud, analise, novo_cv)
                     st.balloons()
 
                 except Exception as e:
-                    st.error(f"Houve um erro no processamento da IA: {e}")
+                    st.error(f"Erro no processamento: {e}")
 
                     # LINHA CORRIGIDA: Agora perfeitamente alinhada com o bloco try
                     nota = extrair_nota_robusta(analise)
@@ -274,5 +251,6 @@ st.button("📋 Copiar Texto Limpo para o Word", on_click=lambda: st.write("Text
 
                 except Exception as e:
                     st.error(f"Houve um erro no processamento da IA: {e}")
+
 
 

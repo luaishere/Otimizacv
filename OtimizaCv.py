@@ -14,222 +14,185 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- CSS (VISUAL) ----------------
+# ---------------- ESTILIZAÇÃO (UX LIMPO) ----------------
 st.markdown("""
 <style>
     .stApp { background-color: #0E1117; color: #E0E0E0; }
-    h1 { color: #A78BFA !important; font-family: 'Helvetica Neue', sans-serif; font-weight: 800; }
-    h2, h3 { color: #F3F4F6 !important; }
-    
+    h1 { color: #A78BFA !important; font-weight: 800; }
     .hero-box {
         background: linear-gradient(90deg, #1F2937 0%, #111827 100%);
-        padding: 30px;
-        border-radius: 15px;
-        border-left: 6px solid #8B5CF6;
-        margin-bottom: 30px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        padding: 25px;
+        border-radius: 12px;
+        border-left: 5px solid #8B5CF6;
+        margin-bottom: 25px;
     }
-    .hero-box h3 { color: #C4B5FD !important; margin-top: 0; }
-    
-    .stTextInput input, .stTextArea textarea { 
-        background-color: #1F2937 !important; color: #FFFFFF !important; border: 1px solid #374151; border-radius: 8px;
-    }
-    
-    [data-testid="stFileUploader"] {
-        background-color: #1F2937; border: 2px dashed #6D28D9; padding: 20px; border-radius: 12px; text-align: center;
-    }
-
     .stButton > button { 
         background: linear-gradient(90deg, #7C3AED 0%, #6D28D9 100%);
-        color: white !important; width: 100%; font-size: 20px; padding: 1rem;
-        border-radius: 12px; border: none; font-weight: 700; 
-        box-shadow: 0 4px 14px 0 rgba(124, 58, 237, 0.39);
-        transition: all 0.2s ease-in-out;
+        color: white !important; font-weight: 700; border-radius: 10px; border: none;
     }
-    .stButton > button:hover { transform: scale(1.02); }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- HEADER ----------------
-st.title("Otimizador de Currículo Express")
-st.caption("Em um clique: Diagnóstico completo + Nova versão do seu CV.")
-
-st.markdown("""
-<div class="hero-box">
-    <h3>Como funciona a Mágica 1-Clique:</h3>
-    <p>
-        Nossa IA lê seu perfil e a vaga. Em alguns segundos, ela vai:
-        <br>1. 🕵️‍♀️ <b>Investigar</b> se você passa no filtro do robô recrutador.
-        <br>2. ✨ <b>Reescrever</b> seu currículo automaticamente com as palavras-chave certas.
-        <br>3. 🛡️ <b>Fidelidade:</b> Ela não inventará nada que não esteja no seu currículo original.
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-# ---------------- CONFIG ----------------
+# ---------------- CONFIGURAÇÃO IA ----------------
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-except Exception as e:
-    st.error("Erro de conexão. Verifique a chave de API nas Secrets.")
+except:
+    st.error("Erro de conexão. Verifique as Secrets no Streamlit Cloud.")
     st.stop()
 
-# ---------------- FUNÇÕES ----------------
+# ---------------- FUNÇÕES DE APOIO ----------------
 def extrair_texto_pdf(arquivo):
     try:
         reader = PyPDF2.PdfReader(arquivo)
         texto = ""
         for page in reader.pages:
             content = page.extract_text()
-            if content:
-                texto += content
-        if not texto.strip():
-            return "ERRO_VAZIO"
-        return texto
+            if content: texto += content
+        return texto.strip() if texto else "ERRO_VAZIO"
     except:
         return "ERRO_LEITURA"
 
+def limpar_markdown(texto):
+    """Remove asteriscos e excessos para exibição em cards informativos."""
+    if not texto: return ""
+    return texto.replace("**", "").replace("#", "").strip()
+
 def extrair_nota_robusta(texto):
-    """Extrai a nota ignorando formatações de negrito ou espaços extras."""
     match = re.search(r'(?:Nota|Minha Nota).*?(\d+)', texto, re.IGNORECASE | re.DOTALL)
     return int(match.group(1)) if match else 0
 
-def salvar_no_sheets(email, nota, resumo_candidato, resumo_vaga, resumo_otimizacao, analise, cv_novo):
+def salvar_no_sheets(email, nota, res_cand, res_vaga, res_mud, analise, cv_novo):
     try:
         scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
         gc = gspread.authorize(creds)
         sh = gc.open("Banco de Curriculos")
         sheet = sh.sheet1
-
-        dados = [
-            str(datetime.now()), 
-            email, 
-            f"{nota}%", 
-            resumo_candidato,
-            resumo_vaga,
-            resumo_otimizacao,
-            analise,
-            cv_novo
-        ]
+        dados = [str(datetime.now()), email, f"{nota}%", res_cand, res_vaga, res_mud, analise, cv_novo]
         sheet.append_row(dados)
-        return True
     except Exception as e:
-        st.error(f"Erro ao salvar na planilha: {e}")
-        return False
+        st.error(f"Erro ao salvar no banco: {e}")
 
-def chamar_ia_completa(dados_cv, dados_vaga):
-    model = genai.GenerativeModel("gemini-flash-latest")
+def chamar_ia(dados_cv, dados_vaga):
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    prompt = f"""
+    Atue como Especialista em ATS. REGRA: NÃO invente informações.
     
-    prompt_mestre = f"""
-    Atue como uma Especialista em Recolocação e ATS.
-    
-    REGRA DE FIDELIDADE: É proibido inventar ferramentas, cursos ou experiências que não estejam no CV original.
-    
-    TAREFA 1: ANÁLISE (Fale com o candidato)
-    1. **Onde você brilha ✨:** (Pontos fortes)
-    2. **Cuidado com isso ⚠️:** (Gaps e riscos reais. Mencione se a vaga pede algo que o candidato não tem)
+    TAREFA 1: ANÁLISE (Resumo p/ o candidato)
+    1. **Onde você brilha ✨**
+    2. **Cuidado com isso ⚠️**
     3. **Minha Nota:** X%
-    4. **Veredito:** (Resumo sincero)
+    4. **Veredito**
 
-    TAREFA 2: OTIMIZAÇÃO (Gere o documento)
-    Reescreva o currículo priorizando o que o candidato JÁ TEM e que a vaga pede.
+    TAREFA 2: OTIMIZAÇÃO (O currículo novo)
+    Reescreva o currículo focado na vaga usando APENAS dados reais do CV original.
     
     ---DIVISOR_CV---
-    (Texto do Novo Currículo em Markdown)
+    (Texto do Novo CV em Markdown)
     
     ---DIVISOR_DADOS---
-    CANDIDATO: (Resumo perfil)
-    VAGA: (Resumo vaga)
+    CANDIDATO: (1 frase do perfil atual)
+    VAGA: (1 frase da vaga)
     MUDANCA: (O que foi priorizado)
     
-    DADOS DE ENTRADA:
+    ENTRADA:
     CV: {dados_cv}
     VAGA: {dados_vaga}
     """
-    
-    resposta = model.generate_content(prompt_mestre).text
-    return resposta
+    return model.generate_content(prompt).text
 
-# ---------------- INTERFACE ----------------
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("1. Quem é você?")
-    email = st.text_input("Seu e-mail", placeholder="ex: joao@email.com")
-    pdf = st.file_uploader("Seu Currículo (PDF)", type="pdf")
-with col2:
-    st.subheader("2. A Vaga Alvo")
-    vaga = st.text_area("Descrição da Vaga", height=260, placeholder="Cole a descrição completa aqui...")
+# ---------------- INTERFACE PRINCIPAL ----------------
+st.title("🎯 Otimizador de Currículo Express")
+st.markdown("""
+<div class="hero-box">
+    <h3>Como funciona:</h3>
+    O Agente analisa seu perfil contra a vaga alvo e gera uma nova versão estratégica 
+    <b>sem inventar dados</b>, garantindo que você passe pelos filtros automáticos (ATS).
+</div>
+""", unsafe_allow_html=True)
 
-st.markdown("---")
-aceite = st.checkbox("Aceito compartilhar dados para análise.")
+col_a, col_b = st.columns(2)
+with col_a:
+    st.subheader("1. Seus Dados")
+    user_email = st.text_input("E-mail", placeholder="seu@email.com")
+    user_pdf = st.file_uploader("Seu Currículo (PDF)", type="pdf")
+with col_b:
+    st.subheader("2. A Vaga")
+    job_desc = st.text_area("Descrição da Vaga", height=230, placeholder="Cole aqui os requisitos...")
 
-# ---------------- BOTÃO MÁGICO (UX PRÁTICO E LIMPO) ----------------
+st.divider()
+aceito = st.checkbox("Aceito compartilhar dados para análise e otimização.")
+
+# ---------------- PROCESSAMENTO ----------------
 if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
-    if not aceite or not email or not pdf or not vaga:
-        st.warning("⚠️ Preencha todos os campos para continuar.")
+    if not (user_email and user_pdf and job_desc and aceito):
+        st.warning("⚠️ Preencha todos os campos e aceite os termos.")
     else:
-        with st.spinner("🤖 Analisando seu perfil..."):
-            texto_cv = extrair_texto_pdf(pdf)
+        with st.spinner("🤖 O Agente está trabalhando no seu perfil..."):
+            texto_extraido = extrair_texto_pdf(user_pdf)
             
-            if texto_cv in ["ERRO_VAZIO", "ERRO_LEITURA"]:
-                st.error("❌ Não conseguimos ler o seu PDF. Verifique se ele possui texto selecionável.")
+            if texto_extraido in ["ERRO_VAZIO", "ERRO_LEITURA"]:
+                st.error("Não conseguimos ler seu PDF. Tente um arquivo com texto selecionável.")
             else:
                 try:
-                    resposta_completa = chamar_ia_completa(texto_cv, vaga)
+                    res_ia = chamar_ia(texto_extraido, job_desc)
                     
-                    # --- PARSING SIMPLES E EFICAZ ---
-                    # Dividimos em 3 partes: Análise, CV e Dados
-                    partes_cv = resposta_completa.split("---DIVISOR_CV---")
-                    analise = partes_cv[0].strip()
-                    resto = partes_cv[1] if len(partes_cv) > 1 else ""
+                    # Parsing Robusto
+                    p_cv = res_ia.split("---DIVISOR_CV---")
+                    txt_analise = p_cv[0].strip()
+                    resto = p_cv[1] if len(p_cv) > 1 else ""
                     
-                    partes_dados = resto.split("---DIVISOR_DADOS---")
-                    novo_cv = partes_dados[0].strip()
-                    bloco_resumos = partes_dados[1] if len(partes_dados) > 1 else ""
+                    p_dados = resto.split("---DIVISOR_DADOS---")
+                    txt_novo_cv = p_dados[0].strip()
+                    bloco_meta = p_dados[1] if len(p_dados) > 1 else ""
 
-                    # Extração de nota e resumos para o Sheets
-                    nota = extrair_nota_robusta(analise)
-                    
-                    res_c, res_v, res_m = "N/A", "N/A", "N/A"
-                    for l in bloco_resumos.split('\n'):
-                        if "CANDIDATO:" in l: res_c = l.split(":", 1)[1].strip()
-                        if "VAGA:" in l: res_v = l.split(":", 1)[1].strip()
-                        if "MUDANCA:" in l or "MUDANÇA:" in l: res_m = l.split(":", 1)[1].strip()
+                    # Nota e Metadados para o Sheets
+                    score = extrair_nota_robusta(txt_analise)
+                    m_cand, m_vaga, m_mud = "N/A", "N/A", "N/A"
+                    for linha in bloco_meta.split('\n'):
+                        l = linha.strip()
+                        if "CANDIDATO:" in l: m_cand = l.split(":", 1)[1].strip()
+                        if "VAGA:" in l: m_vaga = l.split(":", 1)[1].strip()
+                        if "MUDANCA:" in l or "MUDANÇA:" in l: m_mud = l.split(":", 1)[1].strip()
 
-                    # --- ENTREGA EM TABS (ORGANIZADO E ÚTIL) ---
-                    st.markdown(f"### 🎯 Resultado: {nota}% de Compatibilidade")
+                    # --- ENTREGA DE RESULTADOS (UX MELHORADA) ---
+                    st.success(f"### 🎯 Compatibilidade: {score}%")
                     
-                    aba_diag, aba_cv = st.tabs(["📊 Diagnóstico", "📄 Novo Currículo"])
+                    tab_diagnostico, tab_curriculo = st.tabs(["📊 Diagnóstico", "✨ Novo Currículo"])
                     
-                    with aba_diag:
-                        # Resumo rápido em colunas
+                    with tab_diagnostico:
                         c1, c2 = st.columns(2)
-                        c1.info(f"**Seu Perfil:**\n{res_c}")
-                        c2.warning(f"**O que mudou:**\n{res_m}")
+                        with c1:
+                            st.info(f"**Perfil Identificado:**\n\n{limpar_markdown(m_cand)}")
+                        with c2:
+                            st.warning(f"**O que mudou:**\n\n{limpar_markdown(m_mud)}")
                         
                         st.divider()
                         st.markdown("#### Análise Detalhada")
-                        st.write(analise)
+                        st.write(txt_analise)
 
-                    with aba_cv:
-                        st.success("✨ Currículo otimizado com sucesso! Copie o texto abaixo:")
-                        # Área de texto para cópia fácil (sem formatação quebrada)
-                        st.text_area("Texto do Novo CV:", value=novo_cv, height=500)
+                    with tab_curriculo:
+                        st.info("💡 Este currículo foi otimizado para o seu perfil real. Veja a prévia e copie o texto abaixo.")
                         
-                        # Download simples
+                        # Preview visual
+                        with st.container(border=True):
+                            st.markdown(txt_novo_cv)
+                        
+                        st.divider()
+                        # Área de cópia
+                        st.subheader("📥 Levar para o seu editor")
+                        st.caption("Clique no ícone de copiar no canto superior direito do campo abaixo:")
+                        st.text_area("Texto Limpo (Ctrl+C)", value=txt_novo_cv, height=400)
+                        
                         st.download_button(
-                            label="📥 Baixar em formato .txt",
-                            data=novo_cv,
-                            file_name=f"Curriculo_Otimizado_{email.split('@')[0]}.txt",
-                            mime="text/plain"
+                            "Baixar como Arquivo .txt", 
+                            txt_novo_cv, 
+                            file_name=f"CV_Otimizado_{datetime.now().strftime('%d%m%Y')}.txt"
                         )
 
-                    # Salva no banco de dados
-                    salvar_no_sheets(email, nota, res_c, res_v, res_m, analise, novo_cv)
+                    # Registro no Sheets
+                    salvar_no_sheets(user_email, score, m_cand, m_vaga, m_mud, txt_analise, txt_novo_cv)
                     st.balloons()
 
                 except Exception as e:
-                    st.error(f"Erro ao processar: {e}")
-
-
-
+                    st.error(f"Erro no processamento da IA: {e}")

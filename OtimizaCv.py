@@ -199,7 +199,6 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
 
                     # Extrai nota (usando a função robusta que te passei antes)
                  nota = extrair_nota_robusta(analise)
-                    
                     # ---------------- EXIBIÇÃO ----------------
                     st.markdown(f"## 📊 Seu Diagnóstico (Match: {nota}%)")
                     st.write(analise)
@@ -216,6 +215,7 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
 
                 except Exception as e:
                     st.error(f"Houve um erro no processamento da IA: {e}")
+
 
 
 

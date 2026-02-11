@@ -177,22 +177,60 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
                 try:
                     resposta_completa = chamar_ia_completa(texto_cv, vaga)
                     
+                    # Inicia as variáveis vazias
                     analise = ""
                     novo_cv = ""
-                    
+                    resumo_candidato = "N/A"
+                    resumo_vaga = "N/A"
+                    resumo_mudanca = "N/A"
+
+                    # 1. Separa a Análise do resto (CV + Dados)
                     if "---DIVISOR_CV---" in resposta_completa:
                         partes = resposta_completa.split("---DIVISOR_CV---")
                         analise = partes[0].strip()
-                        resto = partes[1]
+                        resto_texto = partes[1]
                         
-                        if "---DIVISOR_DADOS---" in resto:
-                            partes_finais = resto.split("---DIVISOR_DADOS---")
+                        # 2. Separa o Currículo dos Dados Finais (Resumos)
+                        if "---DIVISOR_DADOS---" in resto_texto:
+                            partes_finais = resto_texto.split("---DIVISOR_DADOS---")
                             novo_cv = partes_finais[0].strip()
+                            bloco_dados = partes_finais[1].strip()
+                            
+                            # 3. Extrai Candidato, Vaga e Mudança (com suporte a cedilha)
+                            for linha in bloco_dados.split('\n'):
+                                linha_l = linha.strip()
+                                if "CANDIDATO:" in linha_l:
+                                    resumo_candidato = linha_l.replace("CANDIDATO:", "").strip()
+                                elif "VAGA:" in linha_l:
+                                    resumo_vaga = linha_l.replace("VAGA:", "").strip()
+                                elif "MUDANCA:" in linha_l or "MUDANÇA:" in linha_l:
+                                    resumo_mudanca = linha_l.replace("MUDANCA:", "").replace("MUDANÇA:", "").strip()
                         else:
-                            novo_cv = resto.strip()
+                            novo_cv = resto_texto.strip()
                     else:
+                        # Plano B: Se a IA não usar divisores, mostra tudo na análise
                         analise = resposta_completa
-                        novo_cv = "A IA não formatou o currículo separadamente. Verifique o texto acima."
+                        novo_cv = "A IA não formatou o currículo separadamente. Veja o diagnóstico."
+
+                    # Extrai a nota usando a função robusta
+                    nota = extrair_nota_robusta(analise)
+                    
+                    # ---------------- EXIBIÇÃO ----------------
+                    st.markdown(f"## 📊 Seu Diagnóstico (Match: {nota}%)")
+                    st.write(analise)
+                    
+                    st.markdown("---")
+                    st.markdown("## ✨ Sua Nova Versão Otimizada")
+                    if novo_cv:
+                        st.code(novo_cv, language="markdown")
+                    
+                    # Salva no Sheets com os dados capturados
+                    salvar_no_sheets(email, nota, resumo_candidato, resumo_vaga, resumo_mudanca, analise, novo_cv)
+                    
+                    st.balloons()
+
+                except Exception as e:
+                    st.error(f"Houve um erro no processamento da IA: {e}")
 
                     # LINHA CORRIGIDA: Agora perfeitamente alinhada com o bloco try
                     nota = extrair_nota_robusta(analise)
@@ -212,3 +250,4 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
 
                 except Exception as e:
                     st.error(f"Houve um erro no processamento da IA: {e}")
+

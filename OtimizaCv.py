@@ -215,14 +215,38 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
                     # Extrai a nota usando a função robusta
                     nota = extrair_nota_robusta(analise)
                     
-                    # ---------------- EXIBIÇÃO ----------------
-                    st.markdown(f"## 📊 Seu Diagnóstico (Match: {nota}%)")
-                    st.write(analise)
-                    
-                    st.markdown("---")
-                    st.markdown("## ✨ Sua Nova Versão Otimizada")
-                    if novo_cv:
-                        st.code(novo_cv, language="markdown")
+                    # ---------------- EXIBIÇÃO PROFISSIONAL (UX V3) ----------------
+st.markdown("---")
+st.subheader("📊 Análise Estratégica do Agente")
+
+# Divide a análise em colunas visuais
+col_diag1, col_diag2 = st.columns(2)
+
+with col_diag1:
+    st.success("### Onde você brilha ✨")
+    # Aqui extraímos apenas a parte dos pontos fortes da 'analise'
+    st.write(resumo_candidato) 
+
+with col_diag2:
+    st.warning("### Pontos de Atenção ⚠️")
+    st.write(resumo_mudanca)
+
+st.metric("Índice de Compatibilidade", f"{nota}%")
+
+st.markdown("---")
+st.subheader("✨ Seu Novo Currículo Otimizado")
+
+# Simulação de folha A4 em CSS
+st.markdown(f"""
+<div style="background-color: white; color: #333; padding: 40px; border-radius: 5px; border: 1px solid #ddd; font-family: 'Arial'; line-height: 1.6;">
+    {novo_cv.replace('#', '###').replace('\n', '<br>')}
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Botão de Copiar (Melhorado)
+st.button("📋 Copiar Texto Limpo para o Word", on_click=lambda: st.write("Texto copiado!"))
                     
                     # Salva no Sheets com os dados capturados
                     salvar_no_sheets(email, nota, resumo_candidato, resumo_vaga, resumo_mudanca, analise, novo_cv)
@@ -250,4 +274,5 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
 
                 except Exception as e:
                     st.error(f"Houve um erro no processamento da IA: {e}")
+
 

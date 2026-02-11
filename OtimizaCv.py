@@ -9,7 +9,7 @@ from datetime import datetime
 
 # ---------------- CONFIGURAÇÃO DA PÁGINA ----------------
 st.set_page_config(
-    page_title="CV Optimizer Pro V2",
+    page_title="Otimiza CV",
     page_icon="🎯",
     layout="wide"
 )
@@ -19,8 +19,6 @@ st.markdown("""
 <style>
     .stApp { background-color: #0E1117; color: #E0E0E0; }
     .main-header { color: #A78BFA; font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; }
-    
-    /* Cards de análise */
     .metric-card {
         background: #1F2937;
         padding: 20px;
@@ -28,32 +26,24 @@ st.markdown("""
         border-top: 4px solid #8B5CF6;
         text-align: center;
     }
-    
-    /* Melhoria no Uploader */
-    [data-testid="stFileUploader"] {
-        border: 2px dashed #6D28D9;
-        border-radius: 12px;
-    }
-
-    /* Botão de Ação */
     .stButton > button { 
         background: linear-gradient(90deg, #7C3AED 0%, #6D28D9 100%);
-        transition: all 0.3s ease;
         border: none;
         height: 3.5rem;
+        font-weight: bold;
     }
-    .stButton > button:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(124, 58, 237, 0.4); }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- CONFIG ----------------
+# ---------------- CONFIG DE APIS ----------------
 try:
+    # Configuração do Gemini
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 except Exception as e:
-    st.error("Erro de conexão. Verifique a chave de API.")
+    st.error("Erro de configuração das Secrets. Verifique o painel do Streamlit.")
     st.stop()
 
-# ---------------- FUNÇÕES TÉCNICAS (CORRIGIDAS) ----------------
+# ---------------- FUNÇÕES DE APOIO ----------------
 
 def extrair_texto_pdf(arquivo):
     reader = PyPDF2.PdfReader(arquivo)
@@ -64,44 +54,50 @@ def extrair_texto_pdf(arquivo):
     return texto
 
 def extrair_nota_robusta(texto):
-    """
-    CORREÇÃO: Regex flexível para capturar a nota mesmo com 
-    formatação Markdown ou negritos extras.
-    """
-    # Procura por "Nota" seguido de qualquer coisa até encontrar números
     match = re.search(r'(?:Nota|Minha Nota).*?(\d+)', texto, re.IGNORECASE | re.DOTALL)
-    if match:
-        return int(match.group(1))
-    return 0
+    return int(match.group(1)) if match else 0
+
+def salvar_no_sheets(email, nota, resumo_candidato, resumo_vaga, resumo_mudanca, analise, cv_novo):
+    try:
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
+        gc = gspread.authorize(creds)
+        
+        # Abre a planilha pelo nome (Certifique-se de que compartilhou com o e-mail do bot!)
+        sh = gc.open("Banco de Curriculos")
+        sheet = sh.sheet1
+
+        dados = [str(datetime.now()), email, f"{nota}%", resumo_candidato, resumo_vaga, resumo_mudanca, analise, cv_novo]
+        sheet.append_row(dados)
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar na planilha: {e}")
+        return False
 
 def chamar_ia_agente_fiel(dados_cv, dados_vaga):
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    # Alterado para 'gemini-pro' para maior compatibilidade
+    model = genai.GenerativeModel("gemini-pro")
     
-    # PROMPT COM TRAVA DE FIDELIDADE
     prompt_mestre = f"""
     Atue como uma Especialista em Recolocação e ATS.
     
-    CONTEXTO: O usuário quer otimizar o currículo para uma vaga específica.
-    REGRA DE OURO: Você está PROIBIDA de inventar experiências, cargos ou ferramentas que não estejam no currículo original. 
-    Se a vaga pedir algo que o candidato não tem, mencione isso na ANÁLISE como um "Ponto de Atenção", mas NÃO inclua no documento otimizado.
+    REGRA DE OURO: PROIBIDO inventar experiências ou ferramentas que não estejam no currículo original. 
 
-    TAREFA 1: ANÁLISE (Direta e Sincera)
+    TAREFA 1: ANÁLISE
     1. **Onde você brilha ✨**
-    2. **Cuidado com isso ⚠️** (Destaque aqui as competências que a vaga pede mas o candidato NÃO possui)
+    2. **Cuidado com isso ⚠️**
     3. **Minha Nota:** X%
     4. **Veredito**
 
     TAREFA 2: CURRÍCULO OTIMIZADO
-    Reescreva o currículo priorizando os termos da vaga que o candidato REALMENTE possui.
-    - Melhore a escrita das conquistas.
-    - NÃO adicione ferramentas ou cursos não citados no original.
+    Reescreva priorizando termos da vaga que o candidato REALMENTE possui.
     
     ---DIVISOR_CV---
-    (Texto do Novo CV aqui)
+    (Novo CV aqui)
     
     ---DIVISOR_DADOS---
-    CANDIDATO: (Resumo curto)
-    VAGA: (Resumo curto)
+    CANDIDATO: (Resumo perfil)
+    VAGA: (Resumo vaga)
     MUDANCA: (O que foi priorizado)
     
     DADOS:
@@ -112,16 +108,9 @@ def chamar_ia_agente_fiel(dados_cv, dados_vaga):
     resposta = model.generate_content(prompt_mestre).text
     return resposta
 
-# ---------------- INTERFACE ----------------
+# ---------------- INTERFACE PRINCIPAL ----------------
 
-st.markdown('<h1 class="main-header">CV Optimizer Pro <span style="font-size: 1rem; vertical-align: middle; color: #6D28D9;">V2.0</span></h1>', unsafe_allow_html=True)
-
-with st.expander("ℹ️ Como funciona o Agente de Fidelidade", expanded=False):
-    st.write("""
-    Nesta versão, a IA foi instruída a ser **100% fiel ao seu histórico**. 
-    Diferente de outros geradores, ela não "inventará" habilidades que você não tem apenas para enganar o RH. 
-    Se houver um gap, ela te avisará no diagnóstico.
-    """)
+st.markdown('<h1 class="main-header">CV Optimizer Pro <span style="font-size: 1rem; color: #6D28D9;">V2.1</span></h1>', unsafe_allow_html=True)
 
 col1, col2 = st.columns([1, 1.2])
 
@@ -135,51 +124,48 @@ with col2:
     vaga = st.text_area("Descrição da Oportunidade", height=230, placeholder="Cole aqui os requisitos da vaga...")
 
 st.divider()
-aceite = st.checkbox("Estou ciente que esta ferramenta analisa e armazena os dados para fins de otimização profissional.")
+aceite = st.checkbox("Estou ciente que os dados serão processados para fins de otimização.")
 
 if st.button("🚀 Gerar Otimização Estratégica"):
     if not (email and pdf and vaga and aceite):
-        st.warning("⚠️ Por favor, preencha todos os campos e aceite os termos.")
+        st.warning("⚠️ Preencha todos os campos corretamente.")
     else:
-        with st.spinner("🤖 Agente analisando fidelidade e extraindo dados..."):
+        with st.spinner("🤖 Agente analisando e salvando dados..."):
             try:
                 texto_cv = extrair_texto_pdf(pdf)
                 resposta_completa = chamar_ia_agente_fiel(texto_cv, vaga)
                 
-                # Parsing inteligente
+                # Parsing
                 partes_cv = resposta_completa.split("---DIVISOR_CV---")
                 analise = partes_cv[0].strip()
-                
                 restante = partes_cv[1] if len(partes_cv) > 1 else ""
-                partes_dados = restante.split("---DIVISOR_DADOS---")
                 
+                partes_dados = restante.split("---DIVISOR_DADOS---")
                 novo_cv = partes_dados[0].strip()
+                
+                # Extração de metadados para o Sheets
+                bloco_dados = partes_dados[1] if len(partes_dados) > 1 else ""
+                res_c, res_v, res_m = "N/A", "N/A", "N/A"
+                for linha in bloco_dados.split('\n'):
+                    if "CANDIDATO:" in linha: res_c = linha.replace("CANDIDATO:", "").strip()
+                    if "VAGA:" in linha: res_v = linha.replace("VAGA:", "").strip()
+                    if "MUDANCA:" in linha: res_m = linha.replace("MUDANCA:", "").strip()
+
                 nota = extrair_nota_robusta(analise)
 
-                # EXIBIÇÃO EM ABAS (Melhoria de UX)
-                aba1, aba2 = st.tabs(["📊 Diagnóstico de Match", "✨ Novo Currículo"])
-                
+                # Salvar no Google Sheets
+                salvar_no_sheets(email, nota, res_c, res_v, res_m, analise, novo_cv)
+
+                # Exibição
+                aba1, aba2 = st.tabs(["📊 Diagnóstico", "✨ Novo Currículo"])
                 with aba1:
-                    c1, c2 = st.columns([1, 3])
-                    with c1:
-                        st.markdown(f"""
-                        <div class="metric-card">
-                            <small>Compatibilidade</small>
-                            <h2 style="color: #A78BFA; margin:0;">{nota}%</h2>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    with c2:
-                        if nota > 75: st.success("Excelente! Suas experiências reais têm forte aderência.")
-                        else: st.info("Focamos em realçar o que você já tem para subir suas chances.")
-                    
+                    st.markdown(f"### Score de Match: {nota}%")
                     st.markdown(analise)
-                
                 with aba2:
-                    st.info("💡 Este currículo foi gerado sem inventar dados. Copie o texto abaixo:")
-                    st.text_area("Conteúdo pronto para copiar:", value=novo_cv, height=450)
-                    st.download_button("Baixar como TXT", data=novo_cv, file_name="curriculo_otimizado.txt")
+                    st.text_area("Copie seu novo currículo:", value=novo_cv, height=400)
+                    st.download_button("Baixar TXT", novo_cv, file_name="cv_otimizado.txt")
                 
                 st.balloons()
 
             except Exception as e:
-                st.error(f"Houve um erro no processamento: {e}")
+                st.error(f"Erro técnico: {e}")

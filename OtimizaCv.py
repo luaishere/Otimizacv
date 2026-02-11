@@ -163,94 +163,73 @@ with col2:
 st.markdown("---")
 aceite = st.checkbox("Aceito compartilhar dados para análise.")
 
-# ---------------- BOTÃO MÁGICO V4 (UX PREMIUM) ----------------
+# ---------------- BOTÃO MÁGICO (UX PRÁTICO E LIMPO) ----------------
 if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
     if not aceite or not email or not pdf or not vaga:
-        st.warning("⚠️ Preencha tudo acima para a mágica acontecer!")
+        st.warning("⚠️ Preencha todos os campos para continuar.")
     else:
-        with st.spinner("🤖 O Agente está redesenhando sua estratégia..."):
+        with st.spinner("🤖 Analisando seu perfil..."):
             texto_cv = extrair_texto_pdf(pdf)
             
             if texto_cv in ["ERRO_VAZIO", "ERRO_LEITURA"]:
-                st.error("❌ Não conseguimos ler o texto do seu PDF.")
+                st.error("❌ Não conseguimos ler o seu PDF. Verifique se ele possui texto selecionável.")
             else:
                 try:
                     resposta_completa = chamar_ia_completa(texto_cv, vaga)
                     
-                    # --- PARSING INTELIGENTE E LIMPEZA ---
-                    analise, novo_cv = "", ""
-                    res_cand, res_vaga, res_mud = "N/A", "N/A", "N/A"
+                    # --- PARSING SIMPLES E EFICAZ ---
+                    # Dividimos em 3 partes: Análise, CV e Dados
+                    partes_cv = resposta_completa.split("---DIVISOR_CV---")
+                    analise = partes_cv[0].strip()
+                    resto = partes_cv[1] if len(partes_cv) > 1 else ""
+                    
+                    partes_dados = resto.split("---DIVISOR_DADOS---")
+                    novo_cv = partes_dados[0].strip()
+                    bloco_resumos = partes_dados[1] if len(partes_dados) > 1 else ""
 
-                    if "---DIVISOR_CV---" in resposta_completa:
-                        partes = resposta_completa.split("---DIVISOR_CV---")
-                        analise = partes[0].strip()
-                        resto = partes[1]
-                        
-                        if "---DIVISOR_DADOS---" in resto:
-                            p_finais = resto.split("---DIVISOR_DADOS---")
-                            novo_cv = p_finais[0].strip()
-                            # Limpeza dos resumos (remove asteriscos e rótulos da IA)
-                            for l in p_finais[1].split('\n'):
-                                l_limpa = l.replace("**", "").strip()
-                                if "CANDIDATO:" in l_limpa: res_cand = l_limpa.split(":", 1)[1].strip()
-                                if "VAGA:" in l_limpa: res_vaga = l_limpa.split(":", 1)[1].strip()
-                                if "MUDANCA:" in l_limpa or "MUDANÇA:" in l_limpa: 
-                                    res_mud = l_limpa.split(":", 1)[1].strip()
-                        else:
-                            novo_cv = resto.strip()
-                    else:
-                        analise = resposta_completa
-                        novo_cv = "Currículo gerado dentro da análise detalhada."
-
+                    # Extração de nota e resumos para o Sheets
                     nota = extrair_nota_robusta(analise)
+                    
+                    res_c, res_v, res_m = "N/A", "N/A", "N/A"
+                    for l in bloco_resumos.split('\n'):
+                        if "CANDIDATO:" in l: res_c = l.split(":", 1)[1].strip()
+                        if "VAGA:" in l: res_v = l.split(":", 1)[1].strip()
+                        if "MUDANCA:" in l or "MUDANÇA:" in l: res_m = l.split(":", 1)[1].strip()
 
-                    # --- INTERFACE DE ENTREGA (DASHBOARD) ---
-                    st.markdown("---")
-                    st.header("🎯 Resultado da Otimização")
+                    # --- ENTREGA EM TABS (ORGANIZADO E ÚTIL) ---
+                    st.markdown(f"### 🎯 Resultado: {nota}% de Compatibilidade")
                     
-                    # Métricas de topo
-                    m1, m2, m3 = st.columns(3)
-                    m1.metric("Match Score", f"{nota}%")
-                    m2.metric("Status", "Otimizado" if nota > 70 else "Ajustado")
-                    m3.metric("Fidelidade", "100% Protegida")
+                    aba_diag, aba_cv = st.tabs(["📊 Diagnóstico", "📄 Novo Currículo"])
+                    
+                    with aba_diag:
+                        # Resumo rápido em colunas
+                        c1, c2 = st.columns(2)
+                        c1.info(f"**Seu Perfil:**\n{res_c}")
+                        c2.warning(f"**O que mudou:**\n{res_m}")
+                        
+                        st.divider()
+                        st.markdown("#### Análise Detalhada")
+                        st.write(analise)
 
-                    # Cards de Diagnóstico
-                    st.markdown("#### 🕵️ Análise do Agente")
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.info(f"**Perfil Identificado**\n\n{res_cand}")
-                    with c2:
-                        st.warning(f"**Ajustes Estratégicos**\n\n{res_mud}")
+                    with aba_cv:
+                        st.success("✨ Currículo otimizado com sucesso! Copie o texto abaixo:")
+                        # Área de texto para cópia fácil (sem formatação quebrada)
+                        st.text_area("Texto do Novo CV:", value=novo_cv, height=500)
+                        
+                        # Download simples
+                        st.download_button(
+                            label="📥 Baixar em formato .txt",
+                            data=novo_cv,
+                            file_name=f"Curriculo_Otimizado_{email.split('@')[0]}.txt",
+                            mime="text/plain"
+                        )
 
-                    # Novo Currículo - Estilo "Folha de Papel"
-                    st.markdown("---")
-                    st.markdown("### 📄 Prévia do Novo Currículo")
-                    st.caption("Esta versão foi otimizada para passar por robôs (ATS) e recrutadores humanos.")
-                    
-                    # CSS para simular papel A4
-                    st.markdown(f"""
-                    <div style="background-color: white; color: #333; padding: 50px; border-radius: 4px; 
-                                box-shadow: 0 4px 10px rgba(0,0,0,0.5); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                                border: 1px solid #ccc; margin-bottom: 20px;">
-                        <div style="white-space: pre-wrap; font-size: 14px; color: #1a1a1a;">
-                            {novo_cv}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Ações Finais
-                    st.success("✅ Currículo gerado com sucesso!")
-                    col_btn1, col_btn2 = st.columns(2)
-                    with col_btn1:
-                        st.download_button("📥 Baixar como TXT", novo_cv, file_name="curriculo_otimizado.txt", use_container_width=True)
-                    with col_btn2:
-                        with st.expander("👁️ Ver Feedback Completo da IA"):
-                            st.write(analise)
-                    
-                    salvar_no_sheets(email, nota, res_cand, res_vaga, res_mud, analise, novo_cv)
+                    # Salva no banco de dados
+                    salvar_no_sheets(email, nota, res_c, res_v, res_m, analise, novo_cv)
                     st.balloons()
 
                 except Exception as e:
                     st.error(f"Erro ao processar: {e}")
+
 
 

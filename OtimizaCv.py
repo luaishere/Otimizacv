@@ -113,7 +113,7 @@ def salvar_no_sheets(email, nota, resumo_candidato, resumo_vaga, resumo_otimizac
 
 def chamar_ia_completa(dados_cv, dados_vaga):
     # CORREÇÃO DO NOME DO MODELO: Usando a versão estável mais recente
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-flash-latest")
     
     prompt_mestre = f"""
     Atue como uma Especialista em Recolocação e ATS.
@@ -218,3 +218,4 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
 
             except Exception as e:
                 st.error(f"Erro técnico: {e}")
+

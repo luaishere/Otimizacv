@@ -52,7 +52,6 @@ def extrair_texto_pdf(arquivo):
         return "ERRO_LEITURA"
 
 def limpar_markdown_resumo(texto):
-    """Remove sujeira de markdown para exibição limpa em cards."""
     if not texto: return "N/A"
     return texto.replace("**", "").replace("#", "").strip()
 
@@ -87,11 +86,11 @@ def chamar_ia(dados_cv, dados_vaga):
     Reescreva o currículo focado na vaga usando APENAS dados reais do CV original.
     
     ---DIVISOR_CV---
-    (Texto do Novo CV em Markdown)
+    (Texto do Novo CV aqui)
     
     ---DIVISOR_DADOS---
-    CANDIDATO: (1 frase do perfil atual)
-    VAGA: (1 frase da vaga)
+    CANDIDATO: (Resumo perfil)
+    VAGA: (Resumo vaga)
     MUDANCA: (O que foi priorizado)
     
     ENTRADA:
@@ -106,7 +105,7 @@ st.markdown("""
 <div class="hero-box">
     <h3>Como funciona:</h3>
     O Agente analisa seu perfil contra a vaga alvo e gera uma nova versão estratégica 
-    sem inventar dados, garantindo fidelidade e foco nos requisitos da vaga.
+    sem inventar dados, focando no que robôs (ATS) e recrutadores buscam.
 </div>
 """, unsafe_allow_html=True)
 
@@ -136,26 +135,39 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
                 try:
                     res_ia = chamar_ia(texto_extraido, job_desc)
                     
-                    # Parsing Robusto
-                    p_cv = res_ia.split("---DIVISOR_CV---")
-                    txt_analise = p_cv[0].strip()
-                    resto = p_cv[1] if len(p_cv) > 1 else ""
+                    # --- PARSING ROBUSTO ---
+                    analise, txt_novo_cv, bloco_meta = "", "", ""
                     
-                    p_dados = resto.split("---DIVISOR_DADOS---")
-                    txt_novo_cv = p_dados[0].strip()
-                    bloco_meta = p_dados[1] if len(p_dados) > 1 else ""
+                    if "---DIVISOR_CV---" in res_ia:
+                        partes = res_ia.split("---DIVISOR_CV---")
+                        analise = partes[0].strip()
+                        resto = partes[1]
+                        
+                        if "---DIVISOR_DADOS---" in resto:
+                            partes_finais = resto.split("---DIVISOR_DADOS---")
+                            txt_novo_cv = partes_finais[0].strip()
+                            bloco_meta = partes_finais[1].strip()
+                        else:
+                            txt_novo_cv = resto.strip()
+                    else:
+                        analise = res_ia # Fallback caso falte o divisor
+                        txt_novo_cv = "Verifique a aba Diagnóstico para o resultado."
 
-                    score = extrair_nota_robusta(txt_analise)
+                    score = extrair_nota_robusta(analise)
                     m_cand, m_vaga, m_mud = "N/A", "N/A", "N/A"
-                    for linha in bloco_meta.split('\n'):
-                        l = linha.strip()
-                        if "CANDIDATO:" in l: m_cand = l.split(":", 1)[1].strip()
-                        if "VAGA:" in l: m_vaga = l.split(":", 1)[1].strip()
-                        if "MUDANCA:" in l or "MUDANÇA:" in l: m_mud = l.split(":", 1)[1].strip()
+                    if bloco_meta:
+                        for linha in bloco_meta.split('\n'):
+                            l = linha.strip()
+                            if "CANDIDATO:" in l: m_cand = l.split(":", 1)[1].strip()
+                            if "VAGA:" in l: m_vaga = l.split(":", 1)[1].strip()
+                            if "MUDANCA:" in l or "MUDANÇA:" in l: m_mud = l.split(":", 1)[1].strip()
 
                     # --- ENTREGA DE RESULTADOS ---
                     st.success(f"### 🎯 Resultado: {score}% de Compatibilidade")
-                                        
+                    
+                    # CRIAÇÃO DAS ABAS (Corrigindo o erro de "aba_diagnostico not defined")
+                    aba_diagnostico, aba_curriculo = st.tabs(["📊 Diagnóstico", "📄 Novo Currículo"])
+                    
                     with aba_diagnostico:
                         c1, c2 = st.columns(2)
                         with c1:
@@ -164,13 +176,29 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
                             st.warning(f"**O que mudou:**\n\n{limpar_markdown_resumo(m_mud)}")
                         
                         st.divider()
-                        st.markdown("#### Análise Completa")
-                        st.write(txt_analise)
+                        st.markdown("#### Análise Detalhada")
+                        st.write(analise)
+
+                    with aba_curriculo:
+                        if not txt_novo_cv or len(txt_novo_cv) < 50:
+                            st.warning("A IA não separou o currículo corretamente. Verifique a aba Diagnóstico.")
+                        else:
+                            st.success("✨ Currículo otimizado com sucesso! Copie o texto abaixo:")
+                            
+                            # Preview Visual
+                            with st.container(border=True):
+                                st.markdown(txt_novo_cv)
+                            
+                            st.divider()
+                            st.subheader("📥 Levar para o seu editor")
+                            # Área de texto para cópia (UX Prático)
+                            st.text_area("Texto Otimizado (Ctrl+C):", value=txt_novo_cv, height=450)
+                            
+                            st.download_button("Baixar como .txt", txt_novo_cv, file_name="curriculo_otimizado.txt")
 
                     # Salvamento no Banco
-                    salvar_no_sheets(user_email, score, m_cand, m_vaga, m_mud, txt_analise, txt_novo_cv)
+                    salvar_no_sheets(user_email, score, m_cand, m_vaga, m_mud, analise, txt_novo_cv)
                     st.balloons()
 
                 except Exception as e:
                     st.error(f"Erro no processamento da IA: {e}")
-

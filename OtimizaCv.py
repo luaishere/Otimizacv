@@ -118,7 +118,6 @@ def salvar_no_sheets(email, nota, resumo_candidato, resumo_vaga, resumo_otimizac
         return False
 
 def chamar_ia_completa(dados_cv, dados_vaga):
-    # CORREÇÃO DO NOME DO MODELO: Usando a versão estável mais recente
     model = genai.GenerativeModel("gemini-flash-latest")
     
     prompt_mestre = f"""
@@ -178,7 +177,6 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
                 try:
                     resposta_completa = chamar_ia_completa(texto_cv, vaga)
                     
-                    # --- LÓGICA DE SEPARAÇÃO ROBUSTA (PLANO B) ---
                     analise = ""
                     novo_cv = ""
                     
@@ -193,12 +191,12 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
                         else:
                             novo_cv = resto.strip()
                     else:
-                        # PLANO B: Se a IA falhou nos divisores, joga tudo na análise
                         analise = resposta_completa
                         novo_cv = "A IA não formatou o currículo separadamente. Verifique o texto acima."
 
-                    # Extrai nota (usando a função robusta que te passei antes)
-                 nota = extrair_nota_robusta(analise)
+                    # LINHA CORRIGIDA: Agora perfeitamente alinhada com o bloco try
+                    nota = extrair_nota_robusta(analise)
+                    
                     # ---------------- EXIBIÇÃO ----------------
                     st.markdown(f"## 📊 Seu Diagnóstico (Match: {nota}%)")
                     st.write(analise)
@@ -208,14 +206,9 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
                     if novo_cv:
                         st.code(novo_cv, language="markdown")
                     
-                    # Salva no Sheets (opcional, se configurado)
                     salvar_no_sheets(email, nota, "Perfil Identificado", "Vaga Analisada", "Otimização Realizada", analise, novo_cv)
                     
                     st.balloons()
 
                 except Exception as e:
                     st.error(f"Houve um erro no processamento da IA: {e}")
-
-
-
-

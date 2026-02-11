@@ -75,12 +75,18 @@ except Exception as e:
 
 # ---------------- FUNÇÕES ----------------
 def extrair_texto_pdf(arquivo):
-    reader = PyPDF2.PdfReader(arquivo)
-    texto = ""
-    for page in reader.pages:
-        txt = page.extract_text()
-        if txt: texto += txt
-    return texto
+    try:
+        reader = PyPDF2.PdfReader(arquivo)
+        texto = ""
+        for page in reader.pages:
+            content = page.extract_text()
+            if content:
+                texto += content
+        if not texto.strip():
+            return "ERRO_VAZIO"
+        return texto
+    except:
+        return "ERRO_LEITURA"
 
 def extrair_nota_robusta(texto):
     """Extrai a nota ignorando formatações de negrito ou espaços extras."""
@@ -163,59 +169,52 @@ if st.button("🚀 Gerar Diagnóstico + Novo Currículo"):
     if not aceite or not email or not pdf or not vaga:
         st.warning("⚠️ Preencha tudo acima para a mágica acontecer!")
     else:
-        with st.spinner("🤖 A IA está analisando com fidelidade total..."):
-            try:
-                texto_cv = extrair_texto_pdf(pdf)
-                resposta_completa = chamar_ia_completa(texto_cv, vaga)
-                
-                # LÓGICA DE SEPARAÇÃO (Parsing)
-                analise = ""
-                novo_cv = ""
-                resumo_candidato = "N/A"
-                resumo_vaga = "N/A"
-                resumo_mudanca = "N/A"
-
-                if "---DIVISOR_CV---" in resposta_completa:
-                    partes = resposta_completa.split("---DIVISOR_CV---")
-                    analise = partes[0].strip()
-                    resto = partes[1]
+        with st.spinner("🤖 A IA está analisando seu perfil..."):
+            texto_cv = extrair_texto_pdf(pdf)
+            
+            if texto_cv in ["ERRO_VAZIO", "ERRO_LEITURA"]:
+                st.error("❌ Não conseguimos ler o texto do seu PDF. Ele pode ser uma imagem ou estar protegido.")
+            else:
+                try:
+                    resposta_completa = chamar_ia_completa(texto_cv, vaga)
                     
-                    if "---DIVISOR_DADOS---" in resto:
-                        partes_finais = resto.split("---DIVISOR_DADOS---")
-                        novo_cv = partes_finais[0].strip()
-                        bloco_dados = partes_finais[1].strip()
+                    # --- LÓGICA DE SEPARAÇÃO ROBUSTA (PLANO B) ---
+                    analise = ""
+                    novo_cv = ""
+                    
+                    if "---DIVISOR_CV---" in resposta_completa:
+                        partes = resposta_completa.split("---DIVISOR_CV---")
+                        analise = partes[0].strip()
+                        resto = partes[1]
                         
-                        for linha in bloco_dados.split('\n'):
-                            if "CANDIDATO:" in linha: resumo_candidato = linha.replace("CANDIDATO:", "").strip()
-                            if "VAGA:" in linha: resumo_vaga = linha.replace("VAGA:", "").strip()
-                            if "MUDANCA:" in linha: resumo_mudanca = linha.replace("MUDANCA:", "").strip()
+                        if "---DIVISOR_DADOS---" in resto:
+                            partes_finais = resto.split("---DIVISOR_DADOS---")
+                            novo_cv = partes_finais[0].strip()
+                        else:
+                            novo_cv = resto.strip()
                     else:
-                        novo_cv = resto.strip()
+                        # PLANO B: Se a IA falhou nos divisores, joga tudo na análise
+                        analise = resposta_completa
+                        novo_cv = "A IA não formatou o currículo separadamente. Verifique o texto acima."
 
-                # Extrai nota corrigida
-                nota = extrair_nota_robusta(analise)
-                
-                # Salva na planilha
-                salvar_no_sheets(email, nota, resumo_candidato, resumo_vaga, resumo_mudanca, analise, novo_cv)
-                
-                # ---------------- EXIBIÇÃO ----------------
-                st.markdown("## 📊 Seu Diagnóstico")
-                col_n, col_t = st.columns([1, 4])
-                with col_n:
-                    st.metric("Compatibilidade", f"{nota}%")
-                with col_t:
-                    if nota > 70: st.success("Excelente aderência com suas competências atuais!")
-                    else: st.warning("Ajustamos o foco para destacar seus pontos fortes reais.")
-                
-                st.write(analise)
-                
-                st.markdown("---")
-                st.markdown("## ✨ Sua Nova Versão Otimizada (Fiel ao seu Histórico)")
-                st.info("Copie o texto abaixo e cole no seu editor de currículo.")
-                st.code(novo_cv, language="markdown")
-                
-                st.balloons()
+                    # Extrai nota (usando a função robusta que te passei antes)
+                    nota = extrair_nota(analise)
+                    
+                    # ---------------- EXIBIÇÃO ----------------
+                    st.markdown(f"## 📊 Seu Diagnóstico (Match: {nota}%)")
+                    st.write(analise)
+                    
+                    st.markdown("---")
+                    st.markdown("## ✨ Sua Nova Versão Otimizada")
+                    if novo_cv:
+                        st.code(novo_cv, language="markdown")
+                    
+                    # Salva no Sheets (opcional, se configurado)
+                    salvar_no_sheets(email, nota, "Perfil Identificado", "Vaga Analisada", "Otimização Realizada", analise, novo_cv)
+                    
+                    st.balloons()
 
-            except Exception as e:
-                st.error(f"Erro técnico: {e}")
+                except Exception as e:
+                    st.error(f"Houve um erro no processamento da IA: {e}")
+
 
